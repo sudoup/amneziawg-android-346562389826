@@ -10,6 +10,7 @@ on:
         default: release_aab
         options:
         - release_aab
+        - release_apk
         - debug_apk
       ref:
         description: Git ref (branch/tag/sha)
@@ -50,6 +51,11 @@ jobs:
             echo "kind=aab" >> "$GITHUB_OUTPUT"
             echo "needs_signing=true" >> "$GITHUB_OUTPUT"
             ;;
+          release_apk)
+            echo "gradle_task=assembleRelease" >> "$GITHUB_OUTPUT"
+            echo "kind=apk" >> "$GITHUB_OUTPUT"
+            echo "needs_signing=true" >> "$GITHUB_OUTPUT"
+            ;;
           debug_apk)
             echo "gradle_task=assembleDebug" >> "$GITHUB_OUTPUT"
             echo "kind=apk" >> "$GITHUB_OUTPUT"
@@ -87,18 +93,24 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        if [[ "${{ steps.cfg.outputs.kind }}" == "aab" ]]; then
-          FILE="./ui/build/outputs/bundle/release/ui-release.aab"
-        else
-          FILE="./ui/build/outputs/apk/debug/ui-debug.apk"
-        fi
+        case "${{ inputs.target }}" in
+          release_aab)
+            FILE="./ui/build/outputs/bundle/release/ui-release.aab"
+            ;;
+          release_apk)
+            FILE="./ui/build/outputs/apk/release/ui-release-unsigned.apk"
+            ;;
+          debug_apk)
+            FILE="./ui/build/outputs/apk/debug/ui-debug.apk"
+            ;;
+        esac
         if [[ -z "${FILE}" ]]; then
           echo "Built file not found" >&2
           exit 1
         fi
         echo "built_file=${FILE}" >> "$GITHUB_OUTPUT"
 
-    - name: Sign AAB
+    - name: Sign
       if: steps.cfg.outputs.needs_signing == 'true'
       id: sign
       shell: bash
@@ -108,8 +120,9 @@ jobs:
         SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
       run: |
         set -euo pipefail
-        AAB="${{ steps.locate.outputs.built_file }}"
-        SIGNED_AAB="${AAB%.aab}-signed.aab"
+        INPUT="${{ steps.locate.outputs.built_file }}"
+        EXT="${INPUT##*.}"
+        OUTPUT="${INPUT%.*}-signed.${EXT}"
         if [[ -z "${SIGNING_STORE_PASSWORD}" || -z "${SIGNING_KEY_ALIAS}" ]]; then
           echo "Missing secrets: SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS" >&2
           exit 1
@@ -118,10 +131,10 @@ jobs:
           -keystore "${KEYSTORE_PATH}" \
           -storepass "${SIGNING_STORE_PASSWORD}" \
           ${SIGNING_KEY_PASSWORD:+-keypass "${SIGNING_KEY_PASSWORD}"} \
-          -signedjar "${SIGNED_AAB}" \
-          "${AAB}" \
+          -signedjar "${OUTPUT}" \
+          "${INPUT}" \
           "${SIGNING_KEY_ALIAS}"
-        echo "final_file=${SIGNED_AAB}" >> "$GITHUB_OUTPUT"
+        echo "final_file=${OUTPUT}" >> "$GITHUB_OUTPUT"
 
     - name: Read version
       id: version

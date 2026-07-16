@@ -127,13 +127,31 @@ jobs:
           echo "Missing secrets: SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS" >&2
           exit 1
         fi
-        jarsigner \
-          -keystore "${KEYSTORE_PATH}" \
-          -storepass "${SIGNING_STORE_PASSWORD}" \
-          ${SIGNING_KEY_PASSWORD:+-keypass "${SIGNING_KEY_PASSWORD}"} \
-          -signedjar "${OUTPUT}" \
-          "${INPUT}" \
-          "${SIGNING_KEY_ALIAS}"
+        if [[ "${{ steps.cfg.outputs.kind }}" == "aab" ]]; then
+          jarsigner \
+            -keystore "${KEYSTORE_PATH}" \
+            -storepass "${SIGNING_STORE_PASSWORD}" \
+            ${SIGNING_KEY_PASSWORD:+-keypass "${SIGNING_KEY_PASSWORD}"} \
+            -signedjar "${OUTPUT}" \
+            "${INPUT}" \
+            "${SIGNING_KEY_ALIAS}"
+        else
+          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/35.0.0/apksigner"
+          if [[ ! -x "${APKSIGNER}" ]]; then
+            APKSIGNER=$(find "${ANDROID_SDK_ROOT}/build-tools" -name apksigner -type f 2>/dev/null | head -1)
+          fi
+          if [[ -z "${APKSIGNER}" || ! -x "${APKSIGNER}" ]]; then
+            echo "apksigner not found" >&2
+            exit 1
+          fi
+          "${APKSIGNER}" sign \
+            --ks "${KEYSTORE_PATH}" \
+            --ks-pass "pass:${SIGNING_STORE_PASSWORD}" \
+            ${SIGNING_KEY_PASSWORD:+--key-pass "pass:${SIGNING_KEY_PASSWORD}"} \
+            --ks-key-alias "${SIGNING_KEY_ALIAS}" \
+            --out "${OUTPUT}" \
+            "${INPUT}"
+        fi
         echo "final_file=${OUTPUT}" >> "$GITHUB_OUTPUT"
 
     - name: Read version

@@ -160,7 +160,7 @@ jobs:
       run: |
         set -euo pipefail
         VERSION_NAME=$(grep amneziawgVersionName gradle.properties | cut -d= -f2)
-        echo "tag=v${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+        echo "tag=v${VERSION_NAME}-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
